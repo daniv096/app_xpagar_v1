@@ -17,6 +17,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { appStyles, appColors } from '../constants/appStyles'; 
+import { API_URL } from '@env'; // Importa API_URL
+
+// Para depuración: Verifica el valor de API_URL al inicio de esta pantalla
+console.log('TelefonoPaymentScreen - API_URL desde @env:', API_URL);
 
 // --- Ajustes de color a azul (usando appColors.primary) ---
 const primaryColor = appColors.primary; // Azul principal
@@ -51,6 +55,10 @@ const TelefonoPaymentScreen = () => {
     const fetchPlans = async () => {
       try {
         setIsLoading(true);
+        // Asegúrate de que API_URL esté definido antes de usarlo
+        if (!API_URL) {
+          throw new Error('API_URL no está definida. Revisa tu archivo .env y la configuración de Babel.');
+        }
         // Asegúrate de que esta URL es correcta. Para el emulador de Android, 10.0.2.2 es la IP correcta.
         const response = await fetch(`${API_URL}/api/xp/providers/${providerData.slug}/plans`);
 
@@ -85,7 +93,7 @@ const TelefonoPaymentScreen = () => {
     if (providerData?.slug && providerData.slug !== 'cantv') {
       fetchPlans();
     }
-  }, [providerData.slug]); 
+  }, [providerData.slug, API_URL]); // <--- API_URL añadido a las dependencias
 
   const filteredPlans = allPlans.filter(plan => {
       if (providerData.slug === 'movistar') {
@@ -133,6 +141,10 @@ const TelefonoPaymentScreen = () => {
 
     try {
         setIsProcessingPayment(true); // <--- CORRECCIÓN: Usar el nuevo estado de carga
+        // Asegúrate de que API_URL esté definido antes de usarlo
+        if (!API_URL) {
+          throw new Error('API_URL no está definida. Revisa tu archivo .env y la configuración de Babel.');
+        }
         const response = await fetch(`${API_URL}/api/xp/processPayment`, {
             method: 'POST',
             headers: {
@@ -154,7 +166,7 @@ const TelefonoPaymentScreen = () => {
     } catch (err) {
         console.error('Error en la llamada al API de pago:', err);
         setPaymentSuccess(false);
-        setPaymentMessage('Error de conexión al servidor de pagos. Intenta de nuevo.');
+        setPaymentMessage('Error de conexión al servidor de pagos. Intenta de nuevo: ' + err.message);
     } finally {
         setIsProcessingPayment(false); // <--- CORRECCIÓN: Usar el nuevo estado de carga
         setModalVisible(true); // Mostrar el modal de resultado
@@ -728,12 +740,6 @@ const styles = StyleSheet.create({
   dropdownText: {
     fontSize: 16,
     color: appColors.textPrimary,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   dropdownModalContent: {
     width: '80%',

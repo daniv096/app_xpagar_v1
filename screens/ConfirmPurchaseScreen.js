@@ -14,6 +14,7 @@ import {
   LayoutAnimation, // Para animaciones de expansión/colapso
   UIManager, // Para habilitar LayoutAnimation en Android
   Platform, // Para detectar la plataforma
+  Dimensions, // Para obtener el alto de la pantalla
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +30,16 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// URL base para las imágenes estáticas. ¡IMPORTANTE: AJUSTA ESTA IP!
+// Debe ser la IP de tu computadora de desarrollo y el puerto donde sirves las imágenes estáticas.
+// Ejemplo: 'http://192.168.1.4:5501/img_public/'
+const IMAGES_BASE_URL = 'http://192.168.1.4:5501/img_public/'; 
+
+// IMAGEN DE FALLBACK LOCAL (asegúrate de que esta ruta sea correcta en tu proyecto)
+const LOCAL_FALLBACK_IMAGE = require('../assets/sample.png'); 
+
+const { height: screenHeight } = Dimensions.get('window');
+
 const ConfirmPurchaseScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -37,13 +48,16 @@ const ConfirmPurchaseScreen = () => {
   // Estados para la cantidad y el plan de cuotas
   const [quantity, setQuantity] = useState(1);
   const [selectedInstallments, setSelectedInstallments] = useState('3'); // Por defecto 3 cuotas
-  const [initialPaymentPercentage, setInitialPaymentPercentage] = useState(0.20); // 20% de inicial por defecto
+  const [initialPaymentPercentage, setInitialPaymentPercentage] = useState(0.20); 
   const [isProcessingPurchase, setIsProcessingPurchase] = useState(false);
 
-  // Estados para el modal de resultado final
+  // Estados para el modal de resultado final (éxito/error)
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultMessage, setResultMessage] = useState('');
   const [resultSuccess, setResultSuccess] = useState(false);
+
+  // NUEVO ESTADO para el modal de confirmación de compra (la "lengüeta")
+  const [confirmPurchaseModalVisible, setConfirmPurchaseModalVisible] = useState(false);
 
   // Nuevo estado para la política de cambio expandible
   const [policyExpanded, setPolicyExpanded] = useState(false);
@@ -73,10 +87,24 @@ const ConfirmPurchaseScreen = () => {
     );
   }
 
+  // Función para construir la URL completa de la imagen o usar el fallback local
+  const getImageUrl = (relativePath) => {
+    if (!relativePath) {
+      // console.log('DEBUG IMAGE URL: No relativePath provided, using local fallback.');
+      return LOCAL_FALLBACK_IMAGE; // Retorna la imagen local directamente
+    }
+    // Asegúrate de que la ruta no tenga barras duplicadas al inicio
+    const cleanedPath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
+    // Añade un timestamp como parámetro de consulta para forzar la recarga
+    const fullUrl = `${IMAGES_BASE_URL}${cleanedPath}?t=${new Date().getTime()}`;
+    // console.log('DEBUG IMAGE URL: ', fullUrl); // LOG para depuración
+    return { uri: fullUrl }; // Retorna un objeto URI para imágenes de red
+  };
+
   // Cálculos dinámicos
   const itemPrice = parseFloat(articulo.PRO_PRECIO || 0);
   const subtotal = itemPrice * quantity;
-  const initialPaymentAmount = subtotal * initialPaymentPercentage;
+  const initialPaymentAmount = subtotal * initialPaymentPercentage; 
   const remainingAmount = subtotal - initialPaymentAmount;
   const installmentAmount = remainingAmount / parseInt(selectedInstallments);
   const totalAmountToPay = initialPaymentAmount + (installmentAmount * parseInt(selectedInstallments));
@@ -90,7 +118,7 @@ const ConfirmPurchaseScreen = () => {
     breakdown.push({
       type: 'Inicial',
       amount: initialPaymentAmount,
-      // Formato DD/MM
+      // Formato "Hoy DD/MM"
       dueDate: 'Hoy ' + currentDate.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
       description: `Pago inicial por ${quantity}x ${articulo.PRO_DESCRI}`,
     });
@@ -103,7 +131,7 @@ const ConfirmPurchaseScreen = () => {
       breakdown.push({
         type: `Cuota ${i + 1}`,
         amount: installmentAmount,
-        // Formato DD/MM
+        // Formato "DD/MM"
         dueDate: installmentDueDate.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
         description: `Cuota ${i + 1} de ${selectedInstallments}`,
       });
@@ -113,12 +141,15 @@ const ConfirmPurchaseScreen = () => {
 
   const paymentBreakdown = calculatePaymentBreakdown();
 
-  // Lógica para el botón "Comprar" final
-  const handleConfirmPurchase = async () => {
+  // Lógica para abrir el modal de confirmación de compra
+  const handleInitiatePurchase = () => {
+    setConfirmPurchaseModalVisible(true);
+  };
+
+  // Lógica para el botón "Terminar la Compra" dentro del nuevo modal
+  const handleFinalizePurchase = async () => {
     setIsProcessingPurchase(true);
     
-    // Aquí iría la llamada a tu API de backend para registrar la compra
-    // Ejemplo de payload (ajustar según tu API):
     const purchasePayload = {
       userId: userId,
       articuloId: articulo.PRO_CODIGO,
@@ -127,16 +158,16 @@ const ConfirmPurchaseScreen = () => {
       initialPayment: initialPaymentAmount,
       numInstallments: parseInt(selectedInstallments),
       installmentAmount: installmentAmount,
-      // Puedes añadir más detalles como el plan de pago completo, la tienda, etc.
+      deliveryType: 'Retiro en Tienda', // O 'Delivery', dependiendo de la selección del usuario
     };
 
     try {
-      // Este es un placeholder. Debes reemplazarlo con tu endpoint real de compra.
-      const response = await fetch(`${API_URL}/api/processPurchase`, { // <--- REEMPLAZAR CON TU ENDPOINT REAL
+      // Endpoint para crear la compra en el backend
+      const response = await fetch(`${API_URL}/api/purchase`, { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // 'Authorization': `Bearer ${token}`, // Si usas autenticación
+          // 'Authorization': `Bearer ${token}`, // Si usas autenticación, asegúrate de pasar el token
         },
         body: JSON.stringify(purchasePayload),
       });
@@ -151,18 +182,18 @@ const ConfirmPurchaseScreen = () => {
         setResultMessage(data.message || 'Error al procesar la compra. Intenta de nuevo.');
       }
     } catch (error) {
-      console.error('Error al procesar la compra:', error);
+      // console.error('Error al procesar la compra:', error);
       setResultSuccess(false);
       setResultMessage('Error de conexión al servidor al intentar comprar. Intenta de nuevo.');
     } finally {
       setIsProcessingPurchase(false);
-      setResultModalVisible(true);
+      setConfirmPurchaseModalVisible(false); // Cierra el modal de confirmación
+      setResultModalVisible(true); // Abre el modal de resultado final
     }
   };
 
   const handleResultModalClose = () => {
     setResultModalVisible(false);
-    // Después de la compra, puedes navegar a un historial de compras o al dashboard
     navigation.popToTop(); // Vuelve al Dashboard principal
   };
 
@@ -202,9 +233,10 @@ const ConfirmPurchaseScreen = () => {
           <View style={styles.productDetailsCard}>
             <Text style={styles.cardSectionTitle}>Detalles del Artículo</Text>
             <Image 
-              source={{ uri: articulo.PRO_IMAGEN1 || 'https://placehold.co/200x200/E0E0E0/000000?text=No+Image' }} 
+              source={getImageUrl(articulo.PRO_IMAGEN1)} 
               style={styles.productImage} 
               resizeMode="contain"
+              onError={(e) => { /* console.log('ERROR LOADING PRODUCT IMAGE:', e.nativeEvent.error, 'URL:', getImageUrl(articulo.PRO_IMAGEN1)); */ }} 
             />
             <Text style={styles.productName}>{articulo.PRO_DESCRI}</Text>
             <Text style={styles.productStore}>Vendido por: {articulo.TIE_NOMBRE || 'Tienda Desconocida'}</Text>
@@ -282,7 +314,6 @@ const ConfirmPurchaseScreen = () => {
                 <Text style={styles.paymentLabel}>Monto por Cuota:</Text>
                 <Text style={styles.paymentValue}>${installmentAmount.toFixed(2)}</Text>
             </View>
-            {/* La línea antes del total a pagar se manejará en el desglose */}
           </View>
 
           {/* Detalle del Plan de Pago */}
@@ -326,7 +357,7 @@ const ConfirmPurchaseScreen = () => {
           {/* Botón Final de Comprar */}
           <TouchableOpacity 
             style={styles.finalBuyButton} 
-            onPress={handleConfirmPurchase}
+            onPress={handleInitiatePurchase} // Ahora abre el nuevo modal
             disabled={isProcessingPurchase}
           >
             {isProcessingPurchase ? (
@@ -337,6 +368,62 @@ const ConfirmPurchaseScreen = () => {
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Modal de Confirmación de Compra (la "lengüeta" desde abajo) */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={confirmPurchaseModalVisible}
+        onRequestClose={() => setConfirmPurchaseModalVisible(false)}
+      >
+        <View style={styles.bottomModalOverlay}>
+          <View style={styles.bottomModalContent}>
+            <TouchableOpacity style={styles.bottomModalCloseButton} onPress={() => setConfirmPurchaseModalVisible(false)}>
+              <Ionicons name="close-circle-outline" size={30} color={appColors.textSecondary} />
+            </TouchableOpacity>
+            
+            <Text style={styles.bottomModalTitle}>Confirmar tu Pedido</Text>
+
+            <View style={styles.modalProductSummary}>
+              <Image 
+                source={getImageUrl(articulo.PRO_IMAGEN1)} 
+                style={styles.modalProductImage} 
+                resizeMode="contain"
+              />
+              <View style={styles.modalProductInfo}>
+                <Text style={styles.modalProductName} numberOfLines={2}>{articulo.PRO_DESCRI}</Text>
+                <Text style={styles.modalProductQuantity}>Cantidad: {quantity}</Text>
+                <Text style={styles.modalProductPrice}>Total: ${totalAmountToPay.toFixed(2)}</Text>
+                <Text style={styles.modalProductInitialPayment}>Pago Inicial: ${initialPaymentAmount.toFixed(2)}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.deliveryOptionTitle}>Selecciona una opción de entrega:</Text>
+            <View style={styles.deliveryOptionsContainer}>
+              <TouchableOpacity style={styles.deliveryOptionButton}>
+                <Ionicons name="car-outline" size={24} color={appColors.primary} />
+                <Text style={styles.deliveryOptionText}>Delivery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deliveryOptionButton}>
+                <Ionicons name="storefront-outline" size={24} color={appColors.primary} />
+                <Text style={styles.deliveryOptionText}>Retiro en Tienda</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.modalFinalizePurchaseButton} 
+              onPress={handleFinalizePurchase} // Llama a la función que procesa la compra
+              disabled={isProcessingPurchase}
+            >
+              {isProcessingPurchase ? (
+                <ActivityIndicator color={appColors.white} />
+              ) : (
+                <Text style={styles.modalFinalizePurchaseButtonText}>Terminar la Compra</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal de Resultado Final (Éxito/Error) */}
       <Modal visible={resultModalVisible} transparent animationType="fade" onRequestClose={handleResultModalClose}>
@@ -445,6 +532,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginBottom: 15,
     backgroundColor: appColors.background, // Fallback background
+    resizeMode: 'contain', // Aseguramos que se ajuste
   },
   productName: {
     fontSize: 22,
@@ -575,9 +663,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 15,
-    // paddingTop: 10, // Se elimina el padding top aquí
-    // borderTopWidth: 1, // Se elimina el borde superior aquí
-    // borderTopColor: appColors.lightGray,
   },
   totalPaymentLabel: {
     fontSize: 18,
@@ -589,7 +674,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: appColors.green,
   },
-  totalPaymentDivider: { // Nueva línea divisoria para el total
+  totalPaymentDivider: { 
     borderTopWidth: 1,
     borderTopColor: appColors.lightGray,
     marginVertical: 10,
@@ -610,21 +695,18 @@ const styles = StyleSheet.create({
   breakdownItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    // paddingVertical: 5, // Se elimina el padding vertical
-    // borderBottomWidth: 0.5, // Se elimina el borde inferior
-    // borderBottomColor: appColors.lightGray,
-    marginBottom: 5, // Espacio entre ítems
+    marginBottom: 5, 
   },
   breakdownItemType: {
     fontSize: 15,
     fontWeight: 'bold',
     color: appColors.textPrimary,
-    flex: 1, // Permite que ocupe espacio y empuje el monto a la derecha
+    flex: 1, 
   },
   breakdownItemAmount: {
     fontSize: 15,
     color: appColors.textPrimary,
-    textAlign: 'right', // Alinea el monto a la derecha
+    textAlign: 'right', 
   },
 
   // Estilos para la política de cambio (ahora expandible)
@@ -666,7 +748,7 @@ const styles = StyleSheet.create({
   },
 
   finalBuyButton: {
-    backgroundColor: appColors.secondary, // Un color que resalte para el botón de compra final
+    backgroundColor: appColors.secondary, 
     padding: 20,
     borderRadius: 15,
     alignItems: 'center',
@@ -744,6 +826,137 @@ const styles = StyleSheet.create({
   },
   modalActionButtonText: {
     fontSize: 19,
+    fontWeight: 'bold',
+    color: appColors.white,
+  },
+
+  // --- NUEVOS ESTILOS PARA EL MODAL DE CONFIRMACIÓN DE COMPRA (LA "LENGÜETA") ---
+  bottomModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end', // Alinea el contenido al final (abajo)
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', // Fondo oscuro semitransparente
+  },
+  bottomModalContent: {
+    backgroundColor: appColors.cardBackground,
+    width: '100%',
+    height: screenHeight * 0.7, // Aumentado al 70% de la altura de la pantalla
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 25,
+    alignItems: 'center',
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 }, // Sombra hacia arriba
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    position: 'relative', // Para posicionar el botón de cerrar
+  },
+  bottomModalCloseButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    zIndex: 1,
+    padding: 5,
+  },
+  bottomModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: appColors.textPrimary,
+    marginBottom: 20,
+    textAlign: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: appColors.secondary,
+    paddingBottom: 10,
+    width: '80%',
+  },
+  modalProductSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 25,
+    width: '100%',
+    paddingHorizontal: 10,
+  },
+  modalProductImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    marginRight: 15,
+    backgroundColor: appColors.background,
+    resizeMode: 'contain',
+  },
+  modalProductInfo: {
+    flex: 1,
+  },
+  modalProductName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: appColors.textPrimary,
+    marginBottom: 5,
+  },
+  modalProductQuantity: {
+    fontSize: 15,
+    color: appColors.textSecondary,
+    marginBottom: 3,
+  },
+  modalProductPrice: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: appColors.primary,
+    marginBottom: 3,
+  },
+  modalProductInitialPayment: {
+    fontSize: 16,
+    color: appColors.textSecondary,
+    fontStyle: 'italic',
+  },
+  deliveryOptionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: appColors.textPrimary,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  deliveryOptionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 30,
+  },
+  deliveryOptionButton: {
+    backgroundColor: appColors.background,
+    paddingVertical: 15,
+    paddingHorizontal: 25,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: appColors.lightGray,
+    alignItems: 'center',
+    width: '45%',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  deliveryOptionText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: appColors.textPrimary,
+    marginTop: 8,
+  },
+  modalFinalizePurchaseButton: {
+    backgroundColor: appColors.secondary,
+    padding: 18,
+    borderRadius: 15,
+    alignItems: 'center',
+    width: '90%',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  modalFinalizePurchaseButtonText: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: appColors.white,
   },

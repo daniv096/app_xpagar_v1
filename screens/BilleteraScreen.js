@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native'; 
 import { jwtDecode } from 'jwt-decode'; 
 import { API_URL } from '@env'; 
+
+// Para depuración: Verifica el valor de API_URL al inicio
+console.log('BilleteraScreen - API_URL desde @env:', API_URL);
 
 import { appStyles, appColors } from '../constants/appStyles'; 
 
@@ -55,6 +58,10 @@ const BilleteraScreen = () => {
       if (!userId) {
         throw new Error('ID de usuario no disponible.');
       }
+      // Asegúrate de que API_URL esté definido antes de usarlo
+      if (!API_URL) {
+        throw new Error('API_URL no está definida. Revisa tu archivo .env y la configuración de Babel.');
+      }
 
       const response = await fetch(`${API_URL}/api/getUsuarioDetalle/${userId}`);
       const data = await response.json();
@@ -68,8 +75,8 @@ const BilleteraScreen = () => {
       }
     } catch (error) {
       console.error('❌ Error al obtener los datos del usuario en BilleteraScreen:', error);
-      setUserError('Error al cargar los datos del perfil. Intenta de nuevo.');
-      Alert.alert('Error', 'No se pudieron cargar tus datos de usuario. Revisa tu conexión.');
+      setUserError('Error al cargar los datos del perfil. Intenta de nuevo: ' + error.message);
+      Alert.alert('Error', 'No se pudieron cargar tus datos de usuario. Revisa tu conexión o la configuración de API_URL.');
     } finally {
       setLoadingUserData(false);
     }
@@ -83,6 +90,10 @@ const BilleteraScreen = () => {
         setWalletHistory([]); 
         return;
       }
+      // Asegúrate de que API_URL esté definido antes de usarlo
+      if (!API_URL) {
+        throw new Error('API_URL no está definida. Revisa tu archivo .env y la configuración de Babel.');
+      }
       const response = await fetch(`${API_URL}/api/xp/walletHistory/${userId}`);
       if (!response.ok) {
         throw new Error('No se pudo obtener el historial de la billetera.');
@@ -91,7 +102,7 @@ const BilleteraScreen = () => {
       setWalletHistory(data);
     } catch (error) {
       console.error('Error al obtener el historial de la billetera:', error);
-      Alert.alert('Error', 'No se pudo cargar el historial de la billetera.');
+      Alert.alert('Error', 'No se pudo cargar el historial de la billetera: ' + error.message);
     } finally {
       setLoadingHistory(false);
     }
@@ -120,6 +131,11 @@ const BilleteraScreen = () => {
   useEffect(() => {
     const fetchServices = async () => {
       try {
+        setIsLoading(true);
+        // Asegúrate de que API_URL esté definido antes de usarlo
+        if (!API_URL) {
+          throw new Error('API_URL no está definida. Revisa tu archivo .env y la configuración de Babel.');
+        }
         const response = await fetch(`${API_URL}/api/xp/services`); 
 
         if (!response.ok) {
@@ -171,15 +187,15 @@ const BilleteraScreen = () => {
         setError(null); 
       } catch (err) {
         console.error('Error fetching services:', err);
-        setError('No se pudo cargar la lista de servicios. Intenta de nuevo más tarde.');
-        Alert.alert('Error de conexión', 'No se pudo conectar con el servidor para obtener los servicios. Revisa tu conexión o el estado del backend.');
+        setError('No se pudo cargar la lista de servicios. Intenta de nuevo más tarde: ' + err.message);
+        Alert.alert('Error de conexión', 'No se pudo conectar con el servidor para obtener los servicios. Revisa tu conexión o el estado del backend, y asegúrate de que API_URL esté definida.');
       } finally {
         setIsLoading(false); 
       }
     };
 
     fetchServices();
-  }, []); 
+  }, [API_URL]); // <--- API_URL añadido a las dependencias
   
   const handleServicePress = (service) => {
     if (!service.providers || service.providers.length === 0) {

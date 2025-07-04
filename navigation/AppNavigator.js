@@ -30,6 +30,8 @@ import EnviarScreen from '../screens/EnviarScreen';
 import PagarScreen from '../screens/PagarScreen'; 
 import SelectInstallmentPaymentMethodScreen from '../screens/SelectInstallmentPaymentMethodScreen'; 
 import ConfirmPurchaseScreen from '../screens/ConfirmPurchaseScreen'; 
+import PagoMovilCuotaCreditoScreen from '../screens/PagoMovilCuotaCreditoScreen';
+import CreditInstallmentBreakdownScreen from '../screens/CreditInstallmentBreakdownScreen';
 
 
 
@@ -107,6 +109,7 @@ export default function AppNavigator() {
           name="Billetera" 
           component={BilleteraScreen} 
         />
+        <Stack.Screen name="PagoMovilCuotaCreditoScreen" component={PagoMovilCuotaCreditoScreen} /> 
         <Stack.Screen name="ConfirmPurchaseScreen" component={ConfirmPurchaseScreen} options={{ headerShown: false }} />
         <Stack.Screen name="PagarScreen" component={PagarScreen} options={{ headerShown: false }} />
         <Stack.Screen name="EnviarScreen" component={EnviarScreen} options={{ headerShown: false }} />
@@ -120,6 +123,7 @@ export default function AppNavigator() {
         <Stack.Screen name="ResetToken" component={ResetTokenScreen} />
         <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
         <Stack.Screen name="SelectInstallmentPaymentMethodScreen" component={SelectInstallmentPaymentMethodScreen} options={{ headerShown: false }} /> 
+        <Stack.Screen name="CreditInstallmentBreakdownScreen" component={CreditInstallmentBreakdownScreen} options={{ headerShown: false }} /> 
       </Stack.Navigator>      
     </NavigationContainer>
     </SafeAreaProvider>
